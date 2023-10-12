@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Result</title>
+</head>
+<body>
+    <h1>Comparison Result</h1>
+    <p>Similarity Score: {{ score }}</p>
+
+    <h2>Uploaded Images:</h2>
+    <div style="display: flex; justify-content: space-around;">
+        <div style="margin: 10px;">
+            <img src="data:image/jpg;base64,{{ source }}" alt="source" width="300">
+        </div>
+        <div style="margin: 10px;">
+            <img src="data:image/jpg;base64,{{ test }}" alt="test" width="300">
+        </div>
+    </div>
+</body>
+</html>
