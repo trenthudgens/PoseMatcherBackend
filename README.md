@@ -6,6 +6,7 @@ The core functionality and REST API of the PoseMatcher app.
 ```terminal
 # dependencies
 pip install flask
+pip install numpy scikit-image opencv-python
 
 # on linux:
 export FLASK_APP=PoseMatcherBackendDemo.py
