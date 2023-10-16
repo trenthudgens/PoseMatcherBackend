@@ -1,4 +1,4 @@
-from skimage import io, img_as_float
+#from skimage import io, img_as_float
 from skimage.metrics import structural_similarity as ssim
 import numpy as np
 import cv2

@@ -4,8 +4,8 @@
 #all uploaded images are stored in the uploads folder
 
 from flask import Flask, render_template, request, redirect, url_for
+from processor import Processor
 import os
-import random
 import base64
 
 app = Flask(__name__)
@@ -31,8 +31,8 @@ def upload_images():
             # Save the uploaded images
             sourceImageName, testImageName = save_uploaded_images(sourceImage, testImage)
             # Process images and calculate the similarity score
-            similarity_score = round(random.uniform(50, 100), 2)
-            
+            p = Processor()
+            similarity_score = round(p.mse(sourceImageName, testImageName), 2)
             # Redirect to the 'result' page with the image names and similarity score as URL parameters
             return redirect(url_for('result', score=similarity_score, sourceImageName=sourceImageName, testImageName=testImageName))
 
