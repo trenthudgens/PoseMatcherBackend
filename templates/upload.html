@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Upload Images</title>
+</head>
+<body>
+    <h1>Upload Two Images To Compare</h1>
+    <form method="POST" action="/upload" enctype="multipart/form-data">
+        <input type="file" name="source" accept="image/*" required>
+        <br>
+        <input type="file" name="test" accept="image/*" required>
+        <br>
+        <input type="submit" value="Upload Images">
+    </form>
+</body>
+</html>
