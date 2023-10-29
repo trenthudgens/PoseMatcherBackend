@@ -4,7 +4,7 @@ import numpy as np
 import cv2
 
 class Processor():
-
+    
     def mse(self, imageA_path, imageB_path):
         '''
         calculates a very rough, pixel-wise similarity score

@@ -1,7 +1,10 @@
 from mmpose.apis import MMPoseInferencer
 import numpy as np
+import matplotlib
+matplotlib.use('Agg') #Agg backend for server applications
 import matplotlib.pyplot as plt
-from scipy.linalg import orthogonal_procrustes, norm
+import matplotlib.patches as mpatches
+import os
 
 def getKeypoints(inferencer, image_path):
     """
@@ -46,17 +49,20 @@ def flip(keypoints):
 
 
 def scale(X,Y):
+    """
+    #scale and center Y to X's size and position
+    """
     centerX = np.mean(X, axis=0)
     centerY = np.mean(Y, axis=0)
-    #scale and center Y to X's size and position
+    
     scale_x = (max(X[:, 0]) - min(X[:, 0])) / (max(Y[:, 0]) - min(Y[:, 0]))
     scale_y = (max(X[:, 1]) - min(X[:, 1])) / (max(Y[:, 1]) - min(Y[:, 1]))
     scaled_Y = (Y - centerY) * np.array([scale_x, scale_y]) + centerX
     return scaled_Y
 
-
 def OP(X, Y):
-    #Procrustes Y (rotates Y to X. May flip data)
+    Y = scale(X,Y)
+    #Procrustes Y
     centerX = np.mean(X, axis=0)
     centerY = np.mean(Y, axis=0)
     centered_X = X - centerX
@@ -71,26 +77,6 @@ def OP(X, Y):
     """
     pro_Y = np.dot(centered_Y, rotation_matrix) + centerX
     return pro_Y
-    
-
-def OP2(source_pred, test_pred):
-    """
-    Orthogonal Procrustes
-    centers, scales, flips, rotates, then alignes test pred with source pred.
-    using code from
-    https://www.programcreek.com/python/?code=Relph1119%2FGraphicDesignPattern
-    ByPython%2FGraphicDesignPatternByPython-master%2Fvenv%2FLib%2Fsite-package
-    s%2Fscipy%2Flinalg%2Ftests%2Ftest_procrustes.py
-    """
-    def _centered(A):
-        mu = A.mean(axis=0)
-        return A - mu, mu
-    T, T_mu = _centered(test_pred) #center on the origin
-    S, S_mu = _centered(source_pred) #center on the origin
-    R,s = orthogonal_procrustes(T, S) #finds optimal rotation and reflection matrix
-    scale = s/np.square(norm(T)) #scales T to S's size
-    op_test = scale * np.dot(T,R) + S_mu #applies OP to T and translates to source_pred's position
-    return op_test
 
 
 def RMSE(source_pred, test_pred):
@@ -135,26 +121,7 @@ def SAE(source_pred, test_pred):
     #find the distances of each point
     test = np.copy(test_pred)
     distances = np.sqrt(np.sum((source_pred - test)**2,axis=1))
-    #mean = np.mean(distances)
-    """
     
-    #weigh outliers
-    outliers = distances > 2 * mean
-    if any(outliers):
-        print("outliers present")
-        center = np.mean(source_pred)
-        for i in np.where(outliers)[0]:
-            # Calculate the vector from source_pred[i] to the center
-            vector = center - source_pred[i]
-            # Normalize the vector
-            normalized_vector = vector / np.linalg.norm(vector)
-            # Update the outlier to be mean distance away from source_pred[i] on the line to the center
-            test[i] = source_pred[i] + mean * normalized_vector
-        #replace outlier with average distance
-        distances[outliers] = mean
-        mean = np.mean(distances) #update mean
-        print("updated mean:",mean)
-    """
     #find the max distance from test_pred to the corners
     #of the square containing all points
     max_dist = []
@@ -194,62 +161,41 @@ def plot_two_keypoints(source_keypoints, test_keypoints, image_path):
             ax.scatter(x, y, color='green')
         
         # Label the axes
-        ax.set_xlabel('X')
-        ax.set_ylabel('Y')
+        #ax.set_xlabel('X')
+        #ax.set_ylabel('Y')
         
         # Add a legend
-        #ax.legend()
-    
+        legend_labels = ["Source Image", "Test Image"]
+        legend_colors = ['blue', 'green']
+        legend_patches = [mpatches.Patch(color=color, label=label) for color, label in zip(legend_colors, legend_labels)]
+        plt.legend(handles=legend_patches, loc='upper left')  # Adjust the 'loc' parameter as needed
+        
+        #disable grid
+        plt.axis('off')
+        fig.subplots_adjust(bottom = 0)
+        fig.subplots_adjust(top = 1)
+        fig.subplots_adjust(right = 1)
+        fig.subplots_adjust(left = 0)
         # Show the 2D plot
-        plt.show()
-
-
-def plot_keypoints(keypoints, keypointscores, image_path):
-    #Plots the keypoints on the image with score colors
-    """3D keypoints"""
-    """
-    if keypoints.shape[1] == 3:
-        fig,ax = plt.subplots()
-        image = plt.imread(image_path)
-        ax.imshow(image)
+        #plt.show()
         
-        #no score given for keypoints
-        labels = ['center', 'hip', 'knee', 'foot', 'hip','knee','foot','stomach','chest',
-                  'head','head','shoulder','elbow','hand','shoulder','elbow','hand']
-    
-        # Scatter plot the data points X and Y
-        for i, (x, y, z) in enumerate(keypoints):
-            #ax.scatter(x, y, z, color='red', label=labels[i])
-            if i == 0: #center
-                ax.scatter(x, y, color='black', label=labels[i])
-            if 1 <= i <= 3: #left leg
-                ax.scatter(x, y, color='blue', label=labels[i])
-            if 4 <= i <= 6: #right leg
-                ax.scatter(x, y, color='purple', label=labels[i])
-            if 7 <= i <= 8: #spine
-                ax.scatter(x, y, color='green', label=labels[i])
-            if 9 <= i <= 10: #head
-                ax.scatter(x, y, color='black', label=labels[i])
-            if 11 <= i <= 13: #right arm
-                ax.scatter(x, y, color='orange', label=labels[i])
-            if 14 <= i <= 16: #left arm
-                ax.scatter(x, y, color='red', label=labels[i])
-                
-        # Label the axes
-        ax.set_xlabel('X')
-        ax.set_ylabel('Y')
-        #ax.set_zlabel('Z')
-    
-        # Add a legend
-        ax.legend()
-    
-        #ax.view_init(elev=30, azim=70)  # Set elevation and azimuth angles
-    
-    
-        # Show the 3D plot
-        plt.show()
-        """
-    
+        #set image name
+        file_name = os.path.basename(image_path)
+        base_name, file_extension = os.path.splitext(file_name)
+        new_file_name = f"{base_name}_score{file_extension}"
+        #save to the visualizations directory
+        subdirectory = "output/visualizations"
+        output_path = os.path.join(os.getcwd(), subdirectory)
+        os.makedirs(output_path, exist_ok=True)
+        #make sure images with the same name are not overwritten
+        if os.path.exists(os.path.join(output_path, new_file_name)):
+            new_file_name = f"{base_name}_score2{file_extension}"
+        plt.savefig(os.path.join(output_path, new_file_name))
+        return new_file_name
+
+
+def plot_scores(keypoints, keypointscores, image_path):
+    #Plots the keypoints on the image with score colors
     if keypoints.shape[1] == 2:
         """2D keypoints"""
         fig,ax = plt.subplots()
@@ -278,102 +224,92 @@ def plot_keypoints(keypoints, keypointscores, image_path):
             ax.scatter(x, y, color=colors[i], label=labels[i])  # Label points with numbers
 
         # Label the axes
-        ax.set_xlabel('X')
-        ax.set_ylabel('Y')
+        #ax.set_xlabel('X')
+        #ax.set_ylabel('Y')
         
         # Add a legend
-        ax.legend()
+        legend_labels = ["1.0", "0.99 - 0.75", "0.74 - 0.5", "0.49 - 0.25", "< 0.25"]
+        legend_colors = ['green', 'palegreen', 'gold', 'orange', 'red']
+        legend_patches = [mpatches.Patch(color=color, label=label) for color, label in zip(legend_colors, legend_labels)]
+        plt.legend(handles=legend_patches, loc='upper left')  # Adjust the 'loc' parameter as needed
         #invert image
         #plt.gca().invert_yaxis()
-    
-        # Show the 2D plot
-        plt.show()
-        
-        #save the image with keypoints overlaid
-        #plt.savefig('output_image.jpg')
 
-def main():
-    img_path = "C:/Users/Eric Ratzleff/PoseMatcherBackend/test images/salute.jpg"
-    img_path2 = "C:/Users/Eric Ratzleff/PoseMatcherBackend/test images/spinal.jpg"
-    inferencer = MMPoseInferencer('human') #2D keypoints
-    #inferencer = MMPoseInferencer(pose3d="human3d") #3D keypoints
+        # Show the 2D plot
+        #plt.show()
+        #remove grid
+        plt.axis('off')
+        fig.subplots_adjust(bottom = 0)
+        fig.subplots_adjust(top = 1)
+        fig.subplots_adjust(right = 1)
+        fig.subplots_adjust(left = 0)
+        #set image name
+        file_name = os.path.basename(image_path)
+        base_name, file_extension = os.path.splitext(file_name)
+        new_file_name = f"{base_name}_overlay{file_extension}"
+        #save to the visualizations directory
+        subdirectory = "output/visualizations"
+        output_path = os.path.join(os.getcwd(), subdirectory)
+        os.makedirs(output_path, exist_ok=True)
+        #make sure images with the same name are not overwritten
+        if os.path.exists(os.path.join(output_path, new_file_name)):
+            new_file_name = f"{base_name}_overlay2{file_extension}"
+        plt.savefig(os.path.join(output_path, new_file_name))
+        return new_file_name
+
+
+def analyze(img_path, img_path2):
+    """
+    Uses MMPose to detect human poses and produce 2D keypoints.
+    Analyzes keypoint scores.
+    Compares the keypoints and calculates accuracy scores.
+    Input: two image files
+    Output: 2 keypoint-overlaid images, 2 keypoint-scored images,
+    1 image with both sets of keypoints overlaid, and an accuracy score.
+    """
+    image_names = []
+    inferencer = MMPoseInferencer('human')
+    #save keypoint-overlaid images and get keypoints
     source_pred, source_scores = getKeypoints(inferencer, img_path)
     test_pred, test_scores = getKeypoints(inferencer, img_path2)
+    image_names.append(os.path.basename(img_path))
+    image_names.append(os.path.basename(img_path2))
+    #analyze score quality
     if np.mean(source_scores) < 0.5:
         print("Select a better source image.")
     if np.mean(test_scores) < 0.5:
         print("Select a better test image.")
-    plot_keypoints(source_pred, source_scores, img_path)
-    plot_keypoints(test_pred, test_scores, img_path2)
-    
-    flipx = flip(test_pred)
-    
-    scaledx = scale(source_pred, test_pred) #best for same
-    scaledxflip = scale(source_pred, flipx) #best for flipped
-    
-    alignedx = OP(source_pred, scaledx) #best for rotate
-    alignedxflip = OP(source_pred, scaledxflip) #best for flipped on rotate
-    
-    alignedx2 = OP2(source_pred, scaledx)
-    alignedxflip2 = OP2(source_pred, scaledxflip)
-    
-    plot_two_keypoints(source_pred, alignedx, img_path)
-    plot_two_keypoints(source_pred, alignedxflip, img_path)
-    plot_two_keypoints(source_pred, alignedx2, img_path)
-    plot_two_keypoints(source_pred, alignedxflip2, img_path)
-    
-    print("OP1:")
-    print("Accuracy using SAE:", SAE(source_pred, alignedx))
-    print("Accuracy using SAE:", SAE(source_pred, alignedxflip))
-    print("Accuracy using RMSE:", RMSE(source_pred, alignedx))
-    print("Accuracy using RMSE:", RMSE(source_pred, alignedxflip))
-    print("OP2:")
-    print("Accuracy using SAE:", SAE(source_pred, alignedx2))
-    print("Accuracy using SAE:", SAE(source_pred, alignedxflip2))
-    print("Accuracy using RMSE:", RMSE(source_pred, alignedx2))
-    print("Accuracy using RMSE:", RMSE(source_pred, alignedxflip2))
-
-    
-
-if __name__ == "__main__":
-    main()
-    
+    #save visualized score quality
+    p1 = plot_scores(source_pred, source_scores, img_path)
+    p2 = plot_scores(test_pred, test_scores, img_path2)
+    image_names.append(p1)
+    image_names.append(p2)
+    #test flipped image
+    flip_pred = flip(test_pred)
+    #calculate OP
+    aligned_test = OP(source_pred, test_pred)
+    aligned_test_flip = OP(source_pred, flip_pred)
+    #compare images with SAE and RMSE
+    scores = []
+    A1 = SAE(source_pred, aligned_test)
+    A2 = RMSE(source_pred, aligned_test)
+    A1flip = SAE(source_pred, aligned_test_flip)
+    A2flip = RMSE(source_pred, aligned_test_flip)
+    if np.mean([A1, A2]) > np.mean([A1flip, A2flip]):
+        p3 = plot_two_keypoints(source_pred, aligned_test, img_path)
+        image_names.append(p3)
+        scores.append(A1)
+        scores.append(A2)
+        scores = np.round(scores, 2).tolist()
+        return scores, image_names
+    else:
+        p3 = plot_two_keypoints(source_pred, aligned_test_flip, img_path)
+        image_names.append(p3)
+        scores.append(A1flip)
+        scores.append(A2flip)
+        scores = np.round(scores, 2).tolist()
+        return scores, image_names
     """
-    Results:
-    black and white
-    SAE: 62
-    RMSE: 78
-    warrior 4 vs warrior 6
-    SAE: 95
-    RMSE:96
-    warrior 4 rotate vs warrior 4 flip
-    SAE: 99
-    RMSE: 99
-    warrior 9 vs warrior 2
-    SAE: 96
-    RMSE: 97
-    salute vs selfie
-    SAE: 95
-    RMSE: 96
-    frontflip vs extended
-    SAE: 66
-    RMSE: 83
-    trent2 vs trent3
-    SAE: 87
-    RMSE: 92
-    trent3 vs trent2
-    SAE: 83
-    RMSE:84
-    
-    Bad poses are below 80
-    Average poses get 85-90
-    Great poses get around 95
-    Identical poses get 99
-    
-    We can reject images if the test_scores are too low
-    
-    It looks like swapping test and source, or flipping source
-    gives different accuracy scores.
-    OP1 and OP2 are slightly different
-    SAE is more strict vs RMSE
+if __name__ == "__main__":
+    analyze("test images/salute.jpg", "test images/selfie.jpg")
     """

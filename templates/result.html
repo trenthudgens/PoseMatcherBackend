@@ -5,15 +5,31 @@
 </head>
 <body>
     <h1>Comparison Result</h1>
-    <p>Similarity Score: {{ score }}</p>
+    <p>Similarity Score (SAE): {{ SAEscore }}</p>
+    <p>Similarity Score (RMSE): {{ RMSEscore }}</p>
 
-    <h2>Uploaded Images:</h2>
+    <h2>MMPose Analysis:</h2>
     <div style="display: flex; justify-content: space-around;">
         <div style="margin: 10px;">
-            <img src="data:image/jpg;base64,{{ source }}" alt="source" width="300">
+            <img src="data:image/jpeg;base64,{{ MMPose1 }}" alt="source" width="300">
         </div>
         <div style="margin: 10px;">
-            <img src="data:image/jpg;base64,{{ test }}" alt="test" width="300">
+            <img src="data:image/jpeg;base64,{{ MMPose2 }}" alt="test" width="300">
+        </div>
+    </div>
+    <h2>Score Quality Analysis:</h2>
+    <div style="display: flex; justify-content: space-around;">
+        <div style="margin: 10px;">
+            <img src="data:image/jpeg;base64,{{ score_quality1 }}" alt="source" width="300">
+        </div>
+        <div style="margin: 10px;">
+            <img src="data:image/jpeg;base64,{{ score_quality2 }}" alt="test" width="300">
+        </div>
+    </div>
+    <h2>Overlay Keypoints:</h2>
+    <div style="display: flex; justify-content: space-around;">
+        <div style="margin: 10px;">
+            <img src="data:image/jpeg;base64,{{ double_plot }}" alt="source" width="300">
         </div>
     </div>
 </body>

@@ -4,14 +4,14 @@
 #all uploaded images are stored in the uploads folder
 
 from flask import Flask, render_template, request, redirect, url_for
-from processor import Processor
 import os
+import json
 import base64
+import mmposetest
 
 app = Flask(__name__)
-
-UPLOAD_FOLDER = 'uploads'
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+app.config['UPLOAD_FOLDER'] = 'uploads'
+app.config['VISUALIZATIONS_FOLDER'] = 'output/visualizations'
 
 # Default page with a link to the upload page
 @app.route('/')
@@ -31,10 +31,10 @@ def upload_images():
             # Save the uploaded images
             sourceImageName, testImageName = save_uploaded_images(sourceImage, testImage)
             # Process images and calculate the similarity score
-            p = Processor()
-            similarity_score = round(p.mse(sourceImageName, testImageName), 2)
+            scores, image_names = mmposetest.analyze(sourceImageName, testImageName)
+
             # Redirect to the 'result' page with the image names and similarity score as URL parameters
-            return redirect(url_for('result', score=similarity_score, sourceImageName=sourceImageName, testImageName=testImageName))
+            return redirect(url_for('result', score=json.dumps(scores), image=json.dumps(image_names)))
 
     return render_template('upload.html')
 
@@ -53,15 +53,26 @@ def save_uploaded_images(SourceImage, TestImage):
 @app.route('/result')
 def result():
     #displays the similarity score and the images
-    similarity_score = request.args.get('score')
-    sourceImageName = request.args.get('sourceImageName')
-    testImageName = request.args.get('testImageName')
+    similarity_scores = json.loads(request.args.get('score'))
+    image_names = json.loads(request.args.get('image'))
+    if not os.path.exists(app.config['VISUALIZATIONS_FOLDER']):
+        os.makedirs(app.config['VISUALIZATIONS_FOLDER'])
     #open images from path (Pillow might be a better way)
-    with open(sourceImageName, 'rb') as sourceImage:
-        sourceData = base64.b64encode(sourceImage.read()).decode('utf-8')
-    with open(testImageName, 'rb') as testImage:
-        testData = base64.b64encode(testImage.read()).decode('utf-8')
-    return render_template('result.html', score=similarity_score, source=sourceData, test=testData)
+    images = []
+    for i in range(len(image_names)):
+        file_name = os.path.join(app.config['VISUALIZATIONS_FOLDER'], image_names[i])
+        with open(file_name, 'rb') as image:
+            data = base64.b64encode(image.read()).decode('utf-8')
+            images.append(data)
+    
+    return render_template('result.html',
+    SAEscore=similarity_scores[0] if similarity_scores and len(similarity_scores) > 0 else None,
+    RMSEscore=similarity_scores[1] if similarity_scores and len(similarity_scores) > 1 else None,
+    MMPose1=images[0] if images and len(images) > 0 else None,
+    MMPose2=images[1] if images and len(images) > 1 else None,
+    score_quality1=images[2] if images and len(images) > 2 else None,
+    score_quality2=images[3] if images and len(images) > 3 else None,
+    double_plot=images[4] if images and len(images) > 4 else None)
 
 if __name__ == '__main__':
     app.run(debug=True)
