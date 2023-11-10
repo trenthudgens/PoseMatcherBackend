@@ -4,28 +4,26 @@ import matplotlib
 matplotlib.use('Agg') #Agg backend for server applications
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
-import os
+from io import BytesIO
+import base64
 
-def getKeypoints(inferencer, image_path):
+def getInference(inferencer):
     """
-    Uses MMPose's AI to generate a 2D pose from the image.
-    If multiple people are in the images, multiple poses will be created
+    Uses MMPose's AI to generate a 2D pose from all images in the folder.
+    If multiple people are in the images, multiple poses will be created.
+    It is possible to extract multiple poses per image.
+    """
+    result_generator = inferencer('uploads')
+    results = [result for result in result_generator]
+    keypoints = []
+    keypoint_scores = []
+    for result_dict in results:
+        predictions_list = result_dict['predictions']
+        for prediction in predictions_list:
+            keypoints.append(np.array(prediction[0]['keypoints']))
+            keypoint_scores.append(np.array(prediction[0]['keypoint_scores']))
+    return keypoints, keypoint_scores
     
-    """
-    result_generator = inferencer(image_path, out_dir='output')
-    result = next(result_generator)
-    keypoints = result['predictions'][0][0]['keypoints']
-    keypointscores = result['predictions'][0][0]['keypoint_scores'] #the score tells us level of certainty for each point
-    """
-    If we want, we can extract multiple poses.
-    If we want, we can extract the scores of each keypoint if the 2D model was selected.
-    for instance in result['predictions'][0][0]['keypoints']: #grabs all people in the image
-        keypoints.append(instance['keypoints'])
-        #)
-    """
-    keypoints = np.array(keypoints)
-    return keypoints,keypointscores
-
 
 def flip(keypoints):
     """
@@ -105,41 +103,7 @@ def RMSE(source_pred, test_pred):
     mean_squared_diff = np.mean(squared_diff)
     rmse = np.sqrt(mean_squared_diff)
     accuracy = (1 - rmse/max_RMSE) * 100
-    return accuracy
-
-
-def SAE(source_pred, test_pred):
-    
-    """
-    Square Average Error
-    Creates a square containing all the datapoints.
-    Sums the error of the difference between source_pred and test_pred
-    against the maximum error within the square.
-    Input: two scaled, centered sets of 2D keypoints.
-    Output: accuracy score 0-100.
-    """
-    #find the distances of each point
-    test = np.copy(test_pred)
-    distances = np.sqrt(np.sum((source_pred - test)**2,axis=1))
-    
-    #find the max distance from test_pred to the corners
-    #of the square containing all points
-    max_dist = []
-    max_x = max(np.max(source_pred[:, 0]), np.max(test[:, 0]))
-    max_y = max(np.max(source_pred[:, 1]), np.max(test[:, 1]))
-    min_x = min(np.min(source_pred[:, 0]), np.min(test[:, 0]))
-    min_y = min(np.min(source_pred[:, 1]), np.min(test[:, 1]))
-    for keypoint in test:
-       dist1 = np.sqrt(np.sum((keypoint - np.array([min_x, min_y]))**2))
-       dist2 = np.sqrt(np.sum((keypoint - np.array([min_x, max_y]))**2))
-       dist3 = np.sqrt(np.sum((keypoint - np.array([max_x, min_y]))**2))
-       dist4 = np.sqrt(np.sum((keypoint - np.array([max_x, max_y]))**2))
-       max_distance = max(dist1, dist2, dist3, dist4)
-       max_dist.append(max_distance)
-    
-    #find the average error
-    avg_err = np.mean(distances/max_dist)
-    accuracy = (1 - avg_err)*100
+    accuracy = np.round(accuracy, 2)
     return accuracy
 
 
@@ -178,7 +142,7 @@ def plot_two_keypoints(source_keypoints, test_keypoints, image_path):
         fig.subplots_adjust(left = 0)
         # Show the 2D plot
         #plt.show()
-        
+        """
         #set image name
         file_name = os.path.basename(image_path)
         base_name, file_extension = os.path.splitext(file_name)
@@ -192,12 +156,101 @@ def plot_two_keypoints(source_keypoints, test_keypoints, image_path):
             new_file_name = f"{base_name}_score2{file_extension}"
         plt.savefig(os.path.join(output_path, new_file_name))
         return new_file_name
+        """
+        # Convert the figure to a bytes object
+        img_bytes = BytesIO()
+        plt.savefig(img_bytes, format='jpg')
+        img_bytes.seek(0)
+        plt.close()
 
+        # Encode the bytes object as base64
+        img_base64 = base64.b64encode(img_bytes.read()).decode('utf-8')
+
+        # Return the base64-encoded image
+        return img_base64
+
+
+def analyze():
+    """
+    Uses MMPose to detect human poses and produce 2D keypoints.
+    Analyzes keypoint scores on all images in the uploads folder.
+    Compares the keypoints using Orthogonal Procrustes and calculates an accuracy score.
+    Output: an accuracy score and an image with both sets of keypoints overlaid.
+    """
+    try:
+        inferencer = MMPoseInferencer('human')
+        #get keypoints
+        keypoints, keypointscores = getInference(inferencer)
+        source_pred = keypoints[0]
+        test_pred = keypoints[1]
+        source_scores = keypointscores[0]
+        test_scores = keypointscores[1]
+        #analyze score quality
+        if np.mean(source_scores) < 0.5:
+            print("WARNING: Poor source image score.")
+        if np.mean(test_scores) < 0.5:
+            print("WARNING: Poor test image score.")
+        #test flipped image
+        flip_pred = flip(test_pred)
+        #calculate OP
+        aligned_test = OP(source_pred, test_pred)
+        aligned_test_flip = OP(source_pred, flip_pred)
+        #compare images with RMSE
+        score = RMSE(source_pred, aligned_test)
+        scoreflip = RMSE(source_pred, aligned_test_flip)
+        if score > scoreflip:
+            plot = plot_two_keypoints(source_pred, aligned_test, 'uploads/source.jpg')
+            return score, plot
+        else:
+            plotflip = plot_two_keypoints(source_pred, aligned_test_flip, 'uploads/source.jpg')
+            return scoreflip, plotflip
+    except Exception as e:
+        print(f"Error in analyze function: {str(e)}")
+        raise  # Reraise the exception to get a full traceback
+    
+"""
+if __name__ == "__main__":
+    analyze()
+"""
+"""
+def SAE(source_pred, test_pred):
+    
+    
+    #Square Average Error
+    #Creates a square containing all the datapoints.
+    #Sums the error of the difference between source_pred and test_pred
+    #against the maximum error within the square.
+    #Input: two scaled, centered sets of 2D keypoints.
+    #Output: accuracy score 0-100.
+    
+    #find the distances of each point
+    test = np.copy(test_pred)
+    distances = np.sqrt(np.sum((source_pred - test)**2,axis=1))
+    
+    #find the max distance from test_pred to the corners
+    #of the square containing all points
+    max_dist = []
+    max_x = max(np.max(source_pred[:, 0]), np.max(test[:, 0]))
+    max_y = max(np.max(source_pred[:, 1]), np.max(test[:, 1]))
+    min_x = min(np.min(source_pred[:, 0]), np.min(test[:, 0]))
+    min_y = min(np.min(source_pred[:, 1]), np.min(test[:, 1]))
+    for keypoint in test:
+       dist1 = np.sqrt(np.sum((keypoint - np.array([min_x, min_y]))**2))
+       dist2 = np.sqrt(np.sum((keypoint - np.array([min_x, max_y]))**2))
+       dist3 = np.sqrt(np.sum((keypoint - np.array([max_x, min_y]))**2))
+       dist4 = np.sqrt(np.sum((keypoint - np.array([max_x, max_y]))**2))
+       max_distance = max(dist1, dist2, dist3, dist4)
+       max_dist.append(max_distance)
+    
+    #find the average error
+    avg_err = np.mean(distances/max_dist)
+    accuracy = (1 - avg_err)*100
+    return accuracy
 
 def plot_scores(keypoints, keypointscores, image_path):
     #Plots the keypoints on the image with score colors
     if keypoints.shape[1] == 2:
-        """2D keypoints"""
+        #2D keypoints
         fig,ax = plt.subplots()
         image = plt.imread(image_path)
         #ax = fig.add_subplot(111)
@@ -257,59 +310,4 @@ def plot_scores(keypoints, keypointscores, image_path):
         plt.savefig(os.path.join(output_path, new_file_name))
         return new_file_name
 
-
-def analyze(img_path, img_path2):
-    """
-    Uses MMPose to detect human poses and produce 2D keypoints.
-    Analyzes keypoint scores.
-    Compares the keypoints and calculates accuracy scores.
-    Input: two image files
-    Output: 2 keypoint-overlaid images, 2 keypoint-scored images,
-    1 image with both sets of keypoints overlaid, and an accuracy score.
-    """
-    image_names = []
-    inferencer = MMPoseInferencer('human')
-    #save keypoint-overlaid images and get keypoints
-    source_pred, source_scores = getKeypoints(inferencer, img_path)
-    test_pred, test_scores = getKeypoints(inferencer, img_path2)
-    image_names.append(os.path.basename(img_path))
-    image_names.append(os.path.basename(img_path2))
-    #analyze score quality
-    if np.mean(source_scores) < 0.5:
-        print("Select a better source image.")
-    if np.mean(test_scores) < 0.5:
-        print("Select a better test image.")
-    #save visualized score quality
-    p1 = plot_scores(source_pred, source_scores, img_path)
-    p2 = plot_scores(test_pred, test_scores, img_path2)
-    image_names.append(p1)
-    image_names.append(p2)
-    #test flipped image
-    flip_pred = flip(test_pred)
-    #calculate OP
-    aligned_test = OP(source_pred, test_pred)
-    aligned_test_flip = OP(source_pred, flip_pred)
-    #compare images with SAE and RMSE
-    scores = []
-    A1 = SAE(source_pred, aligned_test)
-    A2 = RMSE(source_pred, aligned_test)
-    A1flip = SAE(source_pred, aligned_test_flip)
-    A2flip = RMSE(source_pred, aligned_test_flip)
-    if np.mean([A1, A2]) > np.mean([A1flip, A2flip]):
-        p3 = plot_two_keypoints(source_pred, aligned_test, img_path)
-        image_names.append(p3)
-        scores.append(A1)
-        scores.append(A2)
-        scores = np.round(scores, 2).tolist()
-        return scores, image_names
-    else:
-        p3 = plot_two_keypoints(source_pred, aligned_test_flip, img_path)
-        image_names.append(p3)
-        scores.append(A1flip)
-        scores.append(A2flip)
-        scores = np.round(scores, 2).tolist()
-        return scores, image_names
-    """
-if __name__ == "__main__":
-    analyze("test images/salute.jpg", "test images/selfie.jpg")
-    """
+""" 

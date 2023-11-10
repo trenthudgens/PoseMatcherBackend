@@ -1,53 +1,92 @@
-#Pose Matcher Backend Demo
-
-#all HTML files must be placed in the templates folder
-#all uploaded images are stored in the uploads folder
-
-from flask import Flask, render_template, request, redirect, url_for
+"""
+Pose Matcher Backend Demo
+Uploaded images are stored in the uploads folder and removed at the end.
+"""
+from flask import Flask, render_template, request, jsonify
+from flask_cors import CORS
 import os
-import json
-import base64
 import mmposetest
+import base64
+from PIL import Image
+from io import BytesIO
 
 app = Flask(__name__)
+CORS(app) #Allows HTTP requests from anywhere.
+#CORS(app, resources={r"/*": {"origins": "https://cairob.github.io"}})
 app.config['UPLOAD_FOLDER'] = 'uploads'
-app.config['VISUALIZATIONS_FOLDER'] = 'output/visualizations'
 
-# Default page with a link to the upload page
+
+"""Default page with a link to the frontend."""
 @app.route('/')
 def index():
     return render_template('home.html')
 
-# This route allows users to upload an image
+"""Handles image submission."""
 @app.route('/upload', methods=['POST', 'GET'])
 def upload_images():
-    #handles data submission
     if request.method == 'POST':
-        if 'source' in request.files and 'test' in request.files:
-            sourceImage = request.files['source']
-            testImage = request.files['test']
+        try:
+            # Extract images
+            data = request.get_json()
+            sourceImage = data.get('source', None)
+            testImage = data.get('test', None)
+            if sourceImage and testImage:
+                # Save images
+                sourceImageName, testImageName = save_uploaded_images(sourceImage, testImage)
+                # Analyze images and calculate similarity score
+                score, imageData = mmposetest.analyze()
+                clear_upload_folder()
+                return jsonify({'score': score, 'image': imageData})
+        except Exception as e:
+            error_message = f"Error processing images: {str(e)}"
+            print(error_message)
+            return jsonify({'error': error_message}), 500
             
-        if sourceImage and testImage:
-            # Save the uploaded images
-            sourceImageName, testImageName = save_uploaded_images(sourceImage, testImage)
-            # Process images and calculate the similarity score
-            scores, image_names = mmposetest.analyze(sourceImageName, testImageName)
+"""Decodes base64 images and saves them."""
+def save_uploaded_images(sourceBase64, testBase64):
+    try:
+        if not os.path.exists(app.config['UPLOAD_FOLDER']):
+            os.makedirs(app.config['UPLOAD_FOLDER'])
+        # Decode base64 strings
+        sourceImageData = base64.b64decode(sourceBase64)
+        testImageData = base64.b64decode(testBase64)
+        # Save images
+        with Image.open(BytesIO(sourceImageData)) as sourceImage:
+            sourceImageName = os.path.join(app.config['UPLOAD_FOLDER'], 'source.jpg')
+            sourceImage.save(sourceImageName)
+        with Image.open(BytesIO(testImageData)) as testImage:
+            testImageName = os.path.join(app.config['UPLOAD_FOLDER'], 'test.jpg')
+            testImage.save(testImageName)
+        return sourceImageName, testImageName
+    except Exception as e:
+        print(f"Error saving images: {str(e)}")
+        return None, None
 
-            # Redirect to the 'result' page with the image names and similarity score as URL parameters
-            return redirect(url_for('result', score=json.dumps(scores), image=json.dumps(image_names)))
 
-    return render_template('upload.html')
+def clear_upload_folder():
+    """Deletes contents of the upload folder."""
+    """https://www.askpython.com/python/examples/delete-contents-of-folders"""
+    extension = ".jpg"  # set the file extension to delete
+    for filename in os.listdir(app.config['UPLOAD_FOLDER']): 
+        file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        try:
+            if os.path.isfile(file_path) and filename.endswith(extension):  
+                os.remove(file_path)
+        except Exception as e: 
+            print(f"Error deleting {file_path}: {e}")
 
+if __name__ == '__main__':
+    app.run(debug=True)
+
+"""
+app.config['VISUALIZATIONS_FOLDER'] = 'output/visualizations'
 def save_uploaded_images(SourceImage, TestImage):
     if not os.path.exists(app.config['UPLOAD_FOLDER']):
         os.makedirs(app.config['UPLOAD_FOLDER'])
-    #we can save the images as a PNG or a JPEG
     SourceImageName = os.path.join(app.config['UPLOAD_FOLDER'], 'source.jpg')
     TestImageName = os.path.join(app.config['UPLOAD_FOLDER'], 'test.jpg')
-
     SourceImage.save(SourceImageName)
     TestImage.save(TestImageName)
-
     return SourceImageName, TestImageName
 
 @app.route('/result')
@@ -73,6 +112,11 @@ def result():
     score_quality1=images[2] if images and len(images) > 2 else None,
     score_quality2=images[3] if images and len(images) > 3 else None,
     double_plot=images[4] if images and len(images) > 4 else None)
+"""
 
-if __name__ == '__main__':
-    app.run(debug=True)
+    
+"""
+Optimizations:
+    handle operations asynchronously
+    use logging with error messages
+"""
