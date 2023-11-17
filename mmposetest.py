@@ -178,7 +178,7 @@ def analyze():
     Output: an accuracy score and an image with both sets of keypoints overlaid.
     """
     try:
-        inferencer = MMPoseInferencer('human')
+        inferencer = MMPoseInferencer('human', device='cuda')
         #get keypoints
         keypoints, keypointscores = getInference(inferencer)
         source_pred = keypoints[0]
@@ -207,10 +207,20 @@ def analyze():
     except Exception as e:
         print(f"Error in analyze function: {str(e)}")
         raise  # Reraise the exception to get a full traceback
-    
+        
+def testmmpose():
+    try:
+        inferencer = MMPoseInferencer('human', device='cuda') #Uses GPU in 2D inference
+        #get keypoints
+        result_generator = inferencer('testimages/warrior2.jpg', show=True)
+        result = next(result_generator)
+    except Exception as e:
+        print(f"Error in testmmpose function: {str(e)}")
+        raise  # Reraise the exception to get a full traceback
+        
 """
 if __name__ == "__main__":
-    analyze()
+    testmmpose()
 """
 """
 def SAE(source_pred, test_pred):

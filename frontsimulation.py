@@ -30,9 +30,8 @@ Start up backend:
 A server address should display (for me it is 127.0.0.1:5000)
 
 How to run this file:
-1. Place images next to frontsimulation.py
-2. open command prompt
-3. navigate to PoseMatcherBackend's file
+1. open command prompt
+2. navigate to PoseMatcherBackend's file
 3. python frontsimulation.py testimages/salute.jpg testimages/selfie.jpg
 4. curl -X POST -H "Content-Type: application/json" -d @encoded_images.txt http://127.0.0.1:5000/upload
 
