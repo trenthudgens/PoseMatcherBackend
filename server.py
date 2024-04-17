@@ -42,7 +42,7 @@ def download_model(model_type):
 def decode(request, img_name):
     image_b64 = request.json[img_name]
     image_bits = base64.b64decode(image_b64)
-    image = tf.image.decode_jpeg(image_bits)
+    image = tf.image.decode_image(image_bits)[:, :, :3]
 
     return image
 
