@@ -29,6 +29,7 @@ print(tf.config.list_physical_devices())
 
 
 def download_model(model_type):
+    # use this function to download the AI model
     server_prefix = 'https://omnomnom.vision.rwth-aachen.de/data/metrabs'
     model_zippath = tf.keras.utils.get_file(
         origin=f'{server_prefix}/{model_type}_20211019.zip',
@@ -40,6 +41,7 @@ def download_model(model_type):
 
 
 def decode(request, img_name):
+    # takes an image, and decodes it from a base64 encoding into a regular image. Takes JPG, JPEG, BMP, and PNG.
     image_b64 = request.json[img_name]
     image_bits = base64.b64decode(image_b64)
     image = tf.image.decode_image(image_bits)[:, :, :3]
@@ -48,10 +50,12 @@ def decode(request, img_name):
 
 
 def encode_image(image_path):
+    # encodes the image (visualization) in base64 to send to the frontend via a response
     with open(image_path, "rb") as image_file:
         return base64.b64encode(image_file.read()).decode('utf-8')
 
 
+# define pose structure
 joint_names =  ['pelv', 'lhip', 'rhip', 'spi1', 'lkne', 'rkne', 'spi2', 'lank', 
                 'rank', 'spi3', 'ltoe', 'rtoe', 'neck', 'lcla', 'rcla', 'head', 
                 'lsho', 'rsho', 'lelb', 'relb', 'lwri', 'rwri', 'lhan', 'rhan'] # for smpl_24
@@ -64,32 +68,44 @@ joint_edges = [
 # define skeleton for inference and print the joint names
 skeleton = 'smpl_24'
 
+# load the AI model onto the GPU
 tf.device('/GPU:0')
 model = tf.saved_model.load("C:/Users/Trent Hudgens/.keras/models/metrabs_eff2l_y4") # metrabs_eff2l_y4
 
 
 @app.route('/infer', methods=['OPTIONS', 'POST'])
 def handle_infer():
+    # Main route for AI functionality
     if request.method == 'OPTIONS':
+        # for browser functionality
         response = jsonify()
         response.headers.add('Access-Control-Allow-Origin', '*')
         response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
         response.headers.add('Access-Control-Allow-Methods', 'POST')
         return response
     elif request.method == 'POST':
+        # Main inference, visualization, and comparison score calculation code.
         print(request.headers)
         image1 = decode(request, "image1")
         image2 = decode(request, "image2")
         pred1 = model.detect_poses(image1, skeleton=skeleton)
         pred2 = model.detect_poses(image2, skeleton=skeleton)
 
+        # make sure only one person was detected in each image
+        if len(pred1['poses3d']) == 0:
+            return jsonify({"ERROR": "No one was recognized in the first image."})
+        if len(pred2['poses3d']) == 0:
+            return jsonify({"ERROR": "No one was recognized in the second image."})
+        if len(pred1['poses3d']) > 1:
+            return jsonify({"ERROR": "More than one person was recognized in the first image."})
+        if len(pred2['poses3d']) > 1:
+            return jsonify({"ERROR": "More than one person was recognized in the second image."})
 
-        poses3d1, poses3d2 = np.array(pred1['poses3d'][0], np.float32), np.array(pred2['poses3d'][0], np.float32)
+        poses3d1 = np.array(pred1['poses3d'][0], np.float32)
+        poses3d2 = np.array(pred2['poses3d'][0], np.float32)
 
-        # resp_dict = {"boxes":pred['boxes'].numpy().tolist(),
-        #              "poses2d":pred['poses2d'].numpy().tolist(),
-        #              "poses3d":pred['poses3d'].numpy().tolist()}
 
+        # generate visualizations
         visualize(
             image1.numpy(), 
             pred1['boxes'].numpy(),
@@ -106,6 +122,7 @@ def handle_infer():
             model.per_skeleton_joint_edges['smpl_24'].numpy(),
             "pose2.png")
 
+        # return final scores and visualizations.
         return jsonify({"MJPE": float(normalize_align_and_mjpe(poses3d1, poses3d2)), 
                         "viz1": encode_image("pose1.png"),
                         "viz2": encode_image("pose2.png")})
@@ -124,9 +141,11 @@ def handle_infer():
         #     camera=cameralib.Camera.from_fov(55, image.shape[:2]))
     
 @app.route('/test', methods=['GET'])
-def handle_options():
+def test():
+    # test route to check server function
     return "HELLO!!!"
-if __name__ == '__main__':
 
-    print("test")
+
+if __name__ == '__main__':
+    # launch server.
     serve(app, host='0.0.0.0', port=25565, threads=6)

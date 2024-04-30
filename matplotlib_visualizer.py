@@ -3,6 +3,10 @@ from matplotlib.patches import Rectangle
 from mpl_toolkits.mplot3d import Axes3D
 
 def visualize(image, detections, poses3d, poses2d, edges, fname):
+    '''
+    Takes an image, detection boxes, 3d poses, 2d poses, edges, and a file name, 
+    And saves a PNG of that visualization in the current directory, with the given file name.
+    '''
     fig = plt.figure(figsize=(10, 5.2))
     image_ax = fig.add_subplot(1, 2, 1)
     image_ax.imshow(image)
